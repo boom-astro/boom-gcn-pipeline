@@ -8,7 +8,7 @@ from utils.converter import flux_to_mag, flux_err_to_mag_error, flux_err_to_limi
 
 load_dotenv()
 
-SCHEMA = "https://gcn.nasa.gov/schema/v6.3.0/gcn/notices/boom/alert.schema.json"
+SCHEMA = "https://gcn.nasa.gov/schema/v7.0.0/gcn/notices/boom/alert.schema.json"
 
 TESTING_MODE = str_to_bool(os.getenv("GCN_KAFKA_TESTING_MODE"), default=True)
 if TESTING_MODE:
