@@ -47,6 +47,10 @@ def gcn_notices_consumer(topics=None, offset_reset='latest'):
         else:
             topics_to_consume.append(topic)
 
+    if not topics_to_consume:
+        log(f"{RED}No valid topics to consume. Exiting.{ENDC}")
+        return
+
     consumer.subscribe(topics_to_consume)
     log(f"Subscribed to topic: {topics_to_consume}")
     while True:
