@@ -27,6 +27,7 @@ A `display_skymaps(obj, skymaps, plot=False)` helper is also available in `utils
 ```bash
 git clone https://github.com/antoine-le-calloch/crossmatch-alert-to-skymaps.git
 cd crossmatch-alert-to-skymaps
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.default .env
 ```
