@@ -157,13 +157,13 @@ def boom_gcn_pipeline():
             if msg.error():
                 log(f"Consumer error: {msg.error()}")
                 continue
-            log_empty_poll = True
 
             if skymaps:
                 alert = read_avro(msg)
 
                 if not any(boom_filter.get("filter_name") in BOOM_FILTERS for boom_filter in alert.get("filters", [])):
                     continue
+                log_empty_poll = True
                 obj_id = alert["objectId"]
                 new_processed_alerts += 1
 
