@@ -265,4 +265,7 @@ if __name__ == "__main__":
         from gcn.produce_gcn_notices import GcnProducer
         gcn_notifier = GcnProducer()
 
+    if not gcn_notifier and not slack_notifier:
+        raise SystemExit(f"{RED}No notifier enabled. Please enable at least one of GCN or Slack notifications.{ENDC}")
+
     boom_gcn_pipeline(gcn=gcn_notifier, slack=slack_notifier)
