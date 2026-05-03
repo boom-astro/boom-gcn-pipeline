@@ -2,15 +2,16 @@ import json
 
 from gcn_kafka import Consumer
 
-from utils.gcn import CLIENT_ID, CLIENT_SECRET, DOMAIN, TOPIC, HEARTBEAT_TOPIC
+from utils.gcn import get_gcn_kafka_config
 from utils.logger import log, RED, YELLOW, ENDC
 
 
-def list_gcn_topics(topic_filter=None):
+def list_gcn_topics(topic_filter=None, testing_mode=None):
+    config = get_gcn_kafka_config(testing_mode)
     consumer = Consumer(
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET,
-        domain=DOMAIN
+        client_id=config["client_id"],
+        client_secret=config["client_secret"],
+        domain=config["domain"],
     )
     log(f"Listing available {topic_filter or ''} GCN topics:")
     for topic in consumer.list_topics().topics:
@@ -19,29 +20,32 @@ def list_gcn_topics(topic_filter=None):
     log("")
 
 
-def gcn_notices_consumer(topics=None, offset_reset='latest'):
+def gcn_notices_consumer(topics=None, offset='latest', testing_mode=None):
     """
     Consume GCN notices from specified topics and print them in a human-readable format.
 
     Parameters
     ----------
     topics : list of str, optional
-        List of topics to subscribe to. If None, defaults to [TOPIC, HEARTBEAT_TOPIC].
-    offset_reset : str, optional
+        List of topics to subscribe to. If None, defaults to the configured topic and its heartbeat topic.
+    offset : str, optional
         Offset reset policy for the consumer. Defaults to 'latest'. Other options include 'earliest' and 'none'.
+    testing_mode : bool, optional
+        If True, connects to the testing Kafka cluster. Defaults to None.
     """
+    kafka_config = get_gcn_kafka_config(testing_mode)
     consumer = Consumer(
-        client_id=CLIENT_ID,
-        client_secret=CLIENT_SECRET,
-        domain=DOMAIN,
+        client_id=kafka_config["client_id"],
+        client_secret=kafka_config["client_secret"],
+        domain=kafka_config["domain"],
         config={
-            'auto.offset.reset': offset_reset
+            'auto.offset.reset': offset
         }
     )
 
     topic_list = consumer.list_topics().topics
     topics_to_consume = []
-    for topic in topics or [TOPIC, HEARTBEAT_TOPIC]:
+    for topic in topics or [kafka_config["topic"], kafka_config["heartbeat_topic"]]:
         if not any(available_topic == topic for available_topic in topic_list):
             log(f"{YELLOW}Topic '{topic}' not found in available topics. Skipping.{ENDC}")
         else:
