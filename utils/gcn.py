@@ -10,17 +10,36 @@ load_dotenv()
 
 SCHEMA = "https://gcn.nasa.gov/schema/v7.0.0/gcn/notices/boom/alert.schema.json"
 
-TESTING_MODE = str_to_bool(os.getenv("GCN_KAFKA_TESTING_MODE"), default=True)
-if TESTING_MODE:
-    log(f"{YELLOW}GCN Kafka is running in TESTING MODE using test server and credentials.{ENDC}")
-else:
-    log(f"{GREEN}GCN Kafka is running in PRODUCTION MODE using production server and credentials.{ENDC}")
 
-CLIENT_ID = os.getenv("GCN_KAFKA_USERNAME" if not TESTING_MODE else "GCN_KAFKA_TEST_USERNAME")
-CLIENT_SECRET = os.getenv("GCN_KAFKA_PASSWORD" if not TESTING_MODE else "GCN_KAFKA_TEST_PASSWORD")
-DOMAIN = os.getenv("GCN_KAFKA_SERVER" if not TESTING_MODE else "GCN_KAFKA_TEST_SERVER")
-TOPIC = os.getenv("GCN_KAFKA_TOPIC" if not TESTING_MODE else "GCN_KAFKA_TEST_TOPIC")
-HEARTBEAT_TOPIC = f"{TOPIC}.heartbeat"
+def get_gcn_kafka_config(testing_mode=None):
+    """
+    Get Kafka configuration for GCN connection based on environment variables.
+
+    Parameters
+    ----------
+    testing_mode : bool, optional
+        Whether to use testing mode configuration (GCN_KAFKA_TEST_*).
+        If None, it will be determined by the GCN_KAFKA_TESTING_MODE environment variable (default: True).
+
+    Returns
+    -------
+    dict
+        A dictionary containing Kafka configuration parameters: client_id, client_secret, domain, topic, and heartbeat_topic.
+    """
+    testing_mode = testing_mode if testing_mode is not None else str_to_bool(os.getenv("GCN_KAFKA_TESTING_MODE"), default=True)
+    if testing_mode:
+        log(f"{YELLOW}GCN Kafka is running in TESTING MODE using test server and credentials.{ENDC}")
+    else:
+        log(f"{GREEN}GCN Kafka is running in PRODUCTION MODE using production server and credentials.{ENDC}")
+
+    topic = os.getenv("GCN_KAFKA_TOPIC" if not testing_mode else "GCN_KAFKA_TEST_TOPIC")
+    return {
+        "client_id": os.getenv("GCN_KAFKA_USERNAME" if not testing_mode else "GCN_KAFKA_TEST_USERNAME"),
+        "client_secret": os.getenv("GCN_KAFKA_PASSWORD" if not testing_mode else "GCN_KAFKA_TEST_PASSWORD"),
+        "domain": os.getenv("GCN_KAFKA_SERVER" if not testing_mode else "GCN_KAFKA_TEST_SERVER"),
+        "topic": topic,
+        "heartbeat_topic": f"{topic}.heartbeat",
+    }
 
 
 def prepare_gcn_payload(obj, matching_skymaps):
