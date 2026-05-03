@@ -26,19 +26,25 @@ def get_gcn_kafka_config(testing_mode=None):
     dict
         A dictionary containing Kafka configuration parameters: client_id, client_secret, domain, topic, and heartbeat_topic.
     """
-    testing_mode = testing_mode if testing_mode is not None else str_to_bool(os.getenv("GCN_KAFKA_TESTING_MODE"), default=True)
+    if testing_mode is None:
+        testing_mode = str_to_bool(os.getenv("GCN_KAFKA_TESTING_MODE"), default=True)
     if testing_mode:
         log(f"{YELLOW}GCN Kafka is running in TESTING MODE using test server and credentials.{ENDC}")
     else:
         log(f"{GREEN}GCN Kafka is running in PRODUCTION MODE using production server and credentials.{ENDC}")
 
-    topic = os.getenv("GCN_KAFKA_TOPIC" if not testing_mode else "GCN_KAFKA_TEST_TOPIC")
+    prefix = "GCN_KAFKA_TEST_" if testing_mode else "GCN_KAFKA_"
+    values = {v: os.getenv(prefix + v) for v in ("USERNAME", "PASSWORD", "SERVER", "TOPIC")}
+    missing = [prefix + v for v, val in values.items() if not val]
+    if missing:
+        raise RuntimeError(f"Missing required GCN Kafka environment variable(s): {', '.join(missing)}")
+
     return {
-        "client_id": os.getenv("GCN_KAFKA_USERNAME" if not testing_mode else "GCN_KAFKA_TEST_USERNAME"),
-        "client_secret": os.getenv("GCN_KAFKA_PASSWORD" if not testing_mode else "GCN_KAFKA_TEST_PASSWORD"),
-        "domain": os.getenv("GCN_KAFKA_SERVER" if not testing_mode else "GCN_KAFKA_TEST_SERVER"),
-        "topic": topic,
-        "heartbeat_topic": f"{topic}.heartbeat",
+        "client_id": values["USERNAME"],
+        "client_secret": values["PASSWORD"],
+        "domain": values["SERVER"],
+        "topic": values["TOPIC"],
+        "heartbeat_topic": f"{values['TOPIC']}.heartbeat",
     }
 
 
