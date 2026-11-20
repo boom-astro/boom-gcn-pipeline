@@ -3,6 +3,7 @@ import io
 import time
 import requests
 
+from astropy.time import Time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -289,6 +290,38 @@ class SkyPortal:
         if response.status_code != 200:
             raise ValueError(f"Error fetching localization: HTTP {response.status_code} {response.reason}")
         return io.BytesIO(response.content) # return a BytesIO object containing the FITS file
+
+    def record_match(self, obj_id, dateobs, localization_name, start_jd):
+        """
+        Propose an object as a counterpart of a GCN event, in the localization it was matched in
+        (the newest one of the event when SkyPortal does not know it), unless already recorded
+
+        Parameters
+        ----------
+        obj_id : str
+            ID of the object on SkyPortal
+        dateobs : str
+            Dateobs of the GCN event
+        localization_name : str or None
+            Name of the localization the object was matched in
+        start_jd : float
+            Julian Date of the last non-detection before the first detection
+        """
+        if self.api("GET", f"api/sources_in_gcn/{dateobs}", {"sourcesIDList": obj_id}):
+            return
+        localizations = (self.api("GET", f"api/gcn_event/{dateobs}") or {}).get("localizations") or []
+        if not localizations:
+            raise APIError(f"GCN event {dateobs} has no localization on SkyPortal yet")
+        if localization_name not in {loc["localization_name"] for loc in localizations}:
+            localization_name = max(localizations, key=lambda loc: loc["created_at"])["localization_name"]
+        self.api("POST", f"api/sources_in_gcn/{dateobs}", {
+            "source_id": obj_id,
+            "localization_name": localization_name,
+            "localization_cumprob": 0.95,
+            "status": "pending",
+            "start_date": Time(start_jd, format="jd").isot,
+            "end_date": Time.now().isot,
+        })
 
     def get_objects(self, payload):
         """

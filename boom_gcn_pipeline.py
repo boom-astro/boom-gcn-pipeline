@@ -22,11 +22,13 @@ SKYPORTAL_API_KEY = os.getenv("SKYPORTAL_API_KEY")
 BOOM_FILTERS = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 NOTIFY_GCN = str_to_bool(os.getenv("NOTIFY_GCN"), default=False)
 NOTIFY_SLACK = str_to_bool(os.getenv("NOTIFY_SLACK"), default=False)
+RECORD_MATCHES = str_to_bool(os.getenv("RECORD_MATCHES"), default=False)
 
 GCN = 24*6  # hours for GCN fallback
 FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 HEARTBEAT_INTERVAL = 120 # seconds between each heartbeat log
+RECORD_TIMEOUT = 30*60 # seconds to wait for SkyPortal to ingest the object and event of a match
 NS_PROBABILITY_THRESHOLD = 0.5 # minimum P(BNS) + P(NSBH) of a GW event
 PUBLIC_SURVEY_MATCHES = ("ztf", "lsst")
 
@@ -102,7 +104,22 @@ def remember_processed_skymaps(published_matches, obj_id, processed_skymaps, fir
     save_published_matches(published_matches)
 
 
-def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, published_matches, gcn=None, slack=None):
+def record_matches(skyportal, matches):
+    """Propose each match as a counterpart on SkyPortal, returning those to retry once SkyPortal has ingested them."""
+    to_retry = []
+    for match in matches:
+        try:
+            skyportal.record_match(match["obj_id"], match["dateobs"], match["localization_name"], match["start_jd"])
+            log(f"Recorded {match['obj_id']} as a counterpart candidate of {match['dateobs']} on SkyPortal")
+        except APIError as e:
+            if time.time() < match["until"]:
+                to_retry.append(match)
+            else:
+                log(f"{YELLOW}Could not record {match['obj_id']} for {match['dateobs']} on SkyPortal: {e}{ENDC}")
+    return to_retry
+
+
+def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, published_matches, gcn=None, slack=None, matches_to_record=None):
     """Crossmatch an alert with candidate skymaps and publish a notice for the new matches."""
     obj_id = alert["objectId"]
     matching_skymaps = {}
@@ -141,6 +158,17 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
     if slack:
         ts = slack.send(alert, matching_skymaps)
         slack.send_details(ts, alert, matching_skymaps, gcn_payload, notes)
+    if matches_to_record is not None:
+        matches_to_record += [
+            {
+                "obj_id": obj_id,
+                "dateobs": dateobs,
+                "localization_name": skymap.localization_name,
+                "start_jd": filtered_photometry[0]["jd"],
+                "until": time.time() + RECORD_TIMEOUT,
+            }
+            for dateobs, skymap in matching_skymaps.items()
+        ]
 
     remember_processed_skymaps(
         published_matches,
@@ -160,6 +188,7 @@ def boom_gcn_pipeline(gcn=None, slack=None):
     skymaps = {} # {dateobs: Skymap}
     skipped_events = set() # {dateobs} of events already reported as not usable
     recent_alerts = {}  # {objectId: (alert, filtered_photometry)} to crossmatch with skymaps received later
+    matches_to_record = [] if RECORD_MATCHES else None
 
     check_for_gcn_events_timer = None
     heartbeat_timer = time.time()
@@ -194,6 +223,9 @@ def boom_gcn_pipeline(gcn=None, slack=None):
                     gcn_events += skyportal.get_gcn_events(fallback(GCN), NS_PROBABILITY_THRESHOLD, include_gw=gw_alerts is None)
                 else:
                     log(f"{YELLOW}SkyPortal API is not available, keeping the skymaps already fetched{ENDC}")
+
+                if skyportal_available and matches_to_record:
+                    matches_to_record = record_matches(skyportal, matches_to_record)
 
                 if skyportal_available or gw_alerts:
                     # Check for new GCN events or new localizations for existing events with "< 1000 sq. deg." tag
@@ -252,7 +284,7 @@ def boom_gcn_pipeline(gcn=None, slack=None):
                     if new_skymaps and recent_alerts:
                         log(f"Crossmatching {len(recent_alerts)} recent alerts with {len(new_skymaps)} new skymaps")
                         for alert, filtered_photometry in list(recent_alerts.values()):
-                            crossmatch_and_publish(alert, filtered_photometry, new_skymaps, published_matches, gcn, slack)
+                            crossmatch_and_publish(alert, filtered_photometry, new_skymaps, published_matches, gcn, slack, matches_to_record)
 
             # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
             msg = consumer.poll(timeout=30.0)
@@ -284,7 +316,7 @@ def boom_gcn_pipeline(gcn=None, slack=None):
             recent_alerts[alert["objectId"]] = (alert, filtered_photometry)
 
             if skymaps:
-                crossmatch_and_publish(alert, filtered_photometry, skymaps, published_matches, gcn, slack)
+                crossmatch_and_publish(alert, filtered_photometry, skymaps, published_matches, gcn, slack, matches_to_record)
 
         except APIError as e:
             log(e)

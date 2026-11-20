@@ -63,6 +63,8 @@ class Skymap:
         Area of the 90% credible region, in square degrees.
     distance : SkymapDistance or None
         Per-pixel distance of the localization, for 3D GW skymaps only.
+    localization_name : str or None
+        Name of the localization, as given by SkyPortal or GCN.
     jd : float
         The Julian Date corresponding to dateobs.
     """
@@ -73,6 +75,7 @@ class Skymap:
     tags: list[str]
     area_90: float = None
     distance: SkymapDistance = None
+    localization_name: str = None
     jd: float = field(init=False)
 
     def __post_init__(self):
@@ -148,6 +151,7 @@ def get_skymap(skyportal, cumulative_probability, event):
         tags=event.get("tags", []),
         area_90=area_90,
         distance=distance,
+        localization_name=localization.get("localization_name"),
     )
 
 
